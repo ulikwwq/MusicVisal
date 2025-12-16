@@ -1,0 +1,27 @@
+.root {
+    -fx-background-color: linear-gradient(to bottom, #0f0f0f, #1c1c1c);
+}
+
+.button {
+    -fx-font-size: 14px;
+    -fx-background-radius: 8;
+    -fx-background-color: linear-gradient(to bottom, #444, #222);
+    -fx-text-fill: white;
+    -fx-pref-width: 100px;
+}
+
+.label {
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+}
+
+.visualizer-container {
+    -fx-background-color: #111;
+    -fx-padding: 10;
+    -fx-background-radius: 12;
+    -fx-alignment: bottom-center;
+}
+
+.slider {
+    -fx-pref-width: 200px;
+}
