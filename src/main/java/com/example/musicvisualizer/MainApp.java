@@ -20,7 +20,7 @@ import java.io.File;
 public class MainApp extends Application {
 
     // ===== НАСТРОЙКИ =====
-    private static final int BANDS = 32;
+    private static final int BANDS = 68;
 
     // ===== ПОЛЯ =====
     private MediaPlayer mediaPlayer;
@@ -37,9 +37,9 @@ public class MainApp extends Application {
         Button playButton = new Button("Play");
         Button stopButton = new Button("Stop");
 
-        loadButton.setPrefWidth(220);
-        playButton.setPrefWidth(220);
-        stopButton.setPrefWidth(220);
+        loadButton.setPrefWidth(180);
+        playButton.setPrefWidth(180);
+        stopButton.setPrefWidth(180);
 
         // ===== LABEL =====
         Label trackLabel = new Label("Трек не выбран");
@@ -52,15 +52,15 @@ public class MainApp extends Application {
         );
 
         // ===== ВИЗУАЛИЗАТОР =====
-        HBox visualizer = new HBox(6);
+        HBox visualizer = new HBox(-0.88);
         visualizer.setAlignment(Pos.BOTTOM_CENTER);
-        visualizer.setPrefHeight(240);
+        visualizer.setPrefHeight(220);
 
         for (int i = 0; i < BANDS; i++) {
-            Rectangle bar = new Rectangle(14, 5);
+            Rectangle bar = new Rectangle(10, 5);
             bar.setArcWidth(6);
             bar.setArcHeight(6);
-            bar.setFill(Color.LIMEGREEN);
+            bar.setFill(Color.DARKRED); // стартовый тёмно-красный
             bars[i] = bar;
             visualizer.getChildren().add(bar);
         }
@@ -87,10 +87,11 @@ public class MainApp extends Application {
             mediaPlayer = new MediaPlayer(media);
 
             // ===== НАСТРОЙКА СПЕКТРА =====
-            mediaPlayer.setAudioSpectrumInterval(0.05);
+            mediaPlayer.setAudioSpectrumInterval(0.04589);
             mediaPlayer.setAudioSpectrumNumBands(BANDS);
             mediaPlayer.setAudioSpectrumThreshold(-60);
 
+            // ===== ВИЗУАЛИЗАЦИЯ =====
             mediaPlayer.setAudioSpectrumListener((timestamp, duration, magnitudes, phases) -> {
                 for (int i = 0; i < BANDS; i++) {
 
@@ -98,12 +99,19 @@ public class MainApp extends Application {
                     if (target < 5) target = 5;
 
                     // сглаживание
-                    smoothedHeights[i] += (target - smoothedHeights[i]) * 0.2;
+                    smoothedHeights[i] += (target - smoothedHeights[i]) * 0.15; // <-- плавность 0.15
                     bars[i].setHeight(smoothedHeights[i]);
 
-                    // цвет (зелёный → жёлтый → красный)
-                    double hue = 120 - (smoothedHeights[i] / 220) * 120;
-                    bars[i].setFill(Color.hsb(hue, 1.0, 1.0));
+                    // цвет: тёмно-красный → светло-красный
+                    double brightness = smoothedHeights[i] / 220;
+                    if (brightness > 1.0) brightness = 1.0;
+                    if (brightness < 0.15) brightness = 0.15;
+
+                    bars[i].setFill(Color.hsb(
+                            0,        // красный
+                            0.85,     // насыщенность
+                            brightness // яркость
+                    ));
                 }
             });
 
