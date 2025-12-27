@@ -8,6 +8,8 @@ import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.scene.media.Media;
@@ -187,7 +189,21 @@ public class MainApp extends Application {
         Scene scene = new Scene(root, 900, 600);
         stage.setScene(scene);
         stage.setTitle("Music Visualizer");
+
+        // Устанавливаем обработку горячих клавиш ДО показа окна
+        setupHotkeys(scene);
+
+        // Делаем так, чтобы root получал фокус при клике
+        root.setFocusTraversable(true);
+        root.requestFocus();
+
+        // Обработчик клика для получения фокуса
+        root.setOnMouseClicked(e -> root.requestFocus());
+
         stage.show();
+
+        // Запрашиваем фокус после показа окна
+        root.requestFocus();
 
         /* ================= EVENTS ================= */
         // Кнопка загрузки теперь только в окне плейлиста
@@ -217,6 +233,155 @@ public class MainApp extends Application {
         loadPlaylist();
         updateControlsState();
         refreshBarsColor(); // Инициализация цвета при запуске
+    }
+
+    /* ================= HOTKEYS ================= */
+    private void setupHotkeys(Scene scene) {
+        // Обработчик для всей сцены
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, this::handleKeyPress);
+    }
+
+    private void handleKeyPress(KeyEvent e) {
+        System.out.println("Key pressed: " + e.getCode()); // Для отладки
+
+        // Всегда запрашиваем фокус при нажатии любой клавиши
+        root.requestFocus();
+
+        if (mediaPlayer == null || playlist.isEmpty()) return;
+
+        switch (e.getCode()) {
+            case SPACE:
+                // Пробел - пауза/плей
+                togglePlay();
+                e.consume();
+                break;
+
+            case RIGHT:
+                // Стрелка вправо
+                if (e.isControlDown() || e.isShiftDown()) {
+                    // Следующий трек
+                    playNext();
+                } else {
+                    // Перемотка вперед на 10 секунд
+                    if (mediaPlayer != null) {
+                        Duration currentTime = mediaPlayer.getCurrentTime();
+                        Duration newTime = currentTime.add(Duration.seconds(10));
+                        Duration totalDuration = mediaPlayer.getTotalDuration();
+
+                        if (newTime.lessThanOrEqualTo(totalDuration)) {
+                            mediaPlayer.seek(newTime);
+                            progressSlider.setValue(newTime.toMillis());
+                            timeLabel.setText(format(newTime) + " / " + format(totalDuration));
+                        } else {
+                            // Если дальше конца, то в конец
+                            mediaPlayer.seek(totalDuration);
+                            progressSlider.setValue(totalDuration.toMillis());
+                            timeLabel.setText(format(totalDuration) + " / " + format(totalDuration));
+                        }
+                    }
+                }
+                e.consume();
+                break;
+
+            case LEFT:
+                // Стрелка влево
+                if (e.isControlDown() || e.isShiftDown()) {
+                    // Предыдущий трек
+                    playPrevious();
+                } else {
+                    // Перемотка назад на 10 секунд
+                    if (mediaPlayer != null) {
+                        Duration currentTime = mediaPlayer.getCurrentTime();
+                        Duration newTime = currentTime.subtract(Duration.seconds(10));
+
+                        if (newTime.greaterThanOrEqualTo(Duration.ZERO)) {
+                            mediaPlayer.seek(newTime);
+                            progressSlider.setValue(newTime.toMillis());
+                            timeLabel.setText(format(newTime) + " / " + format(mediaPlayer.getTotalDuration()));
+                        } else {
+                            // Если меньше 0, то в начало
+                            mediaPlayer.seek(Duration.ZERO);
+                            progressSlider.setValue(0);
+                            timeLabel.setText("00:00 / " + format(mediaPlayer.getTotalDuration()));
+                        }
+                    }
+                }
+                e.consume();
+                break;
+
+            case UP:
+                // Стрелка вверх - увеличить громкость
+                if (mediaPlayer != null) {
+                    double currentVolume = volumeSlider.getValue();
+                    double newVolume = Math.min(1.0, currentVolume + 0.1);
+                    volumeSlider.setValue(newVolume);
+                    mediaPlayer.setVolume(newVolume);
+
+                    if (muted && newVolume > 0) {
+                        muted = false;
+                        volumeBtn.setText("🔊");
+                    }
+                }
+                e.consume();
+                break;
+
+            case DOWN:
+                // Стрелка вниз - уменьшить громкость
+                if (mediaPlayer != null) {
+                    double currentVolume = volumeSlider.getValue();
+                    double newVolume = Math.max(0.0, currentVolume - 0.1);
+                    volumeSlider.setValue(newVolume);
+                    mediaPlayer.setVolume(newVolume);
+
+                    if (newVolume == 0 && !muted) {
+                        muted = true;
+                        volumeBtn.setText("🔇");
+                    }
+                }
+                e.consume();
+                break;
+
+            case M:
+                // M - mute/unmute
+                if (mediaPlayer != null) {
+                    if (!muted) {
+                        lastVolume = volumeSlider.getValue();
+                        volumeSlider.setValue(0);
+                        mediaPlayer.setVolume(0);
+                        volumeBtn.setText("🔇");
+                        muted = true;
+                    } else {
+                        volumeSlider.setValue(lastVolume);
+                        mediaPlayer.setVolume(lastVolume);
+                        volumeBtn.setText("🔊");
+                        muted = false;
+                    }
+                }
+                e.consume();
+                break;
+
+            case F:
+                // F - следующий трек
+                playNext();
+                e.consume();
+                break;
+
+            case B:
+                // B - предыдущий трек
+                playPrevious();
+                e.consume();
+                break;
+
+            case R:
+                // R - перезапустить текущий трек
+                if (mediaPlayer != null) {
+                    mediaPlayer.seek(Duration.ZERO);
+                    progressSlider.setValue(0);
+                    timeLabel.setText("00:00 / " + format(mediaPlayer.getTotalDuration()));
+                }
+                e.consume();
+                break;
+        }
     }
 
     /* ================= THEME MANAGEMENT ================= */
