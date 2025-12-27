@@ -44,9 +44,13 @@ public class MainApp extends Application {
     private boolean muted = false;
     private boolean isDragging = false;
     private double lastVolume = 1.0;
+    private boolean darkTheme = true; // Текущая тема (по умолчанию темная)
+    private boolean isThemeTransitioning = false; // Флаг для предотвращения повторных переходов
 
-    private Button playBtn, prevBtn, nextBtn, playlistBtn;
+    private Button playBtn, prevBtn, nextBtn, playlistBtn, themeBtn, volumeBtn;
     private HBox visualizer;
+    private StackPane root;
+    private StackPane glass;
 
     /* ===== VISUALIZER COLORS ===== */
     private Color colorLow = Color.web("#4facfe");
@@ -81,6 +85,7 @@ public class MainApp extends Application {
         visualizerWrapper.setMinHeight(220);
         visualizerWrapper.setMaxHeight(220);
 
+        // Визуализатор и метка в StackPane
         StackPane visualArea = new StackPane(visualizerWrapper, emptyLabel);
         visualArea.setMinHeight(220);
         visualArea.setPrefHeight(220);
@@ -90,10 +95,10 @@ public class MainApp extends Application {
         prevBtn = createButton("⏮");
         playBtn = createButton("▶");
         nextBtn = createButton("⏭");
-        Button loadBtn = createButton("⏏");
         playlistBtn = createButton("☰");
+        themeBtn = createButton("🌙"); // Кнопка переключения темы
 
-        Button volumeBtn = createButton("🔊");
+        volumeBtn = createButton("🔊");
         volumeSlider = new Slider(0, 1, 1);
 
         volumeBtn.setOnAction(e -> {
@@ -116,9 +121,10 @@ public class MainApp extends Application {
             if (mediaPlayer != null) mediaPlayer.setVolume(b.doubleValue());
         });
 
+        // Убрана кнопка загрузки с основной панели
         HBox controls = new HBox(10,
                 volumeBtn, volumeSlider,
-                loadBtn, prevBtn, playBtn, nextBtn, playlistBtn
+                prevBtn, playBtn, nextBtn, playlistBtn, themeBtn
         );
         controls.setAlignment(Pos.CENTER);
 
@@ -160,12 +166,14 @@ public class MainApp extends Application {
         content.setAlignment(Pos.CENTER);
         content.setPadding(new Insets(26));
 
-        StackPane glass = new StackPane(content);
+        glass = new StackPane(content);
         glass.setStyle("-fx-background-color:rgba(20,20,20,0.55); -fx-background-radius:18;");
         glass.setMaxWidth(820);
 
-        StackPane root = new StackPane(glass);
+        root = new StackPane(glass);
         root.setPadding(new Insets(30));
+
+        // Сначала устанавливаем темную тему напрямую
         root.setBackground(new Background(new BackgroundFill(
                 new LinearGradient(
                         0,0,1,1,true,CycleMethod.NO_CYCLE,
@@ -182,8 +190,9 @@ public class MainApp extends Application {
         stage.show();
 
         /* ================= EVENTS ================= */
-        loadBtn.setOnAction(e -> addTracks(stage));
+        // Кнопка загрузки теперь только в окне плейлиста
         playlistBtn.setOnAction(e -> showPlaylistWindow());
+        themeBtn.setOnAction(e -> toggleTheme());
 
         playBtn.setOnAction(e -> togglePlay());
         nextBtn.setOnAction(e -> playNext());
@@ -210,23 +219,237 @@ public class MainApp extends Application {
         refreshBarsColor(); // Инициализация цвета при запуске
     }
 
+    /* ================= THEME MANAGEMENT ================= */
+    private void toggleTheme() {
+        if (isThemeTransitioning) return; // Не запускать новый переход, пока старый не завершен
+
+        isThemeTransitioning = true;
+
+        // Создаем плавный fade out для текущей темы
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(200), glass);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.3);
+
+        fadeOut.setOnFinished(e -> {
+            // Меняем тему
+            darkTheme = !darkTheme;
+            if (darkTheme) {
+                applyDarkTheme();
+                themeBtn.setText("🌙");
+            } else {
+                applyLightTheme();
+                themeBtn.setText("☀");
+            }
+
+            // Плавный fade in для новой темы
+            FadeTransition fadeIn = new FadeTransition(Duration.millis(300), glass);
+            fadeIn.setFromValue(0.3);
+            fadeIn.setToValue(1.0);
+
+            fadeIn.setOnFinished(event -> {
+                isThemeTransitioning = false;
+            });
+
+            fadeIn.play();
+        });
+
+        fadeOut.play();
+    }
+
+    private void applyDarkTheme() {
+        // Плавный переход для фона
+        Background newBackground = new Background(new BackgroundFill(
+                new LinearGradient(
+                        0,0,1,1,true,CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.web("#0f2027")),
+                        new Stop(0.5, Color.web("#16222a")),
+                        new Stop(1, Color.web("#000000"))
+                ),
+                CornerRadii.EMPTY, Insets.EMPTY
+        ));
+
+        root.setBackground(newBackground);
+
+        // Плавный переход для стеклянной панели
+        glass.setStyle("-fx-background-color:rgba(20,20,20,0.55); -fx-background-radius:18;");
+
+        // Плавный переход для меток
+        FadeTransition labelTransition = new FadeTransition(Duration.millis(150), nowPlayingLabel);
+        labelTransition.setFromValue(0.7);
+        labelTransition.setToValue(1.0);
+        labelTransition.play();
+
+        nowPlayingLabel.setStyle(
+                "-fx-text-fill:#E0E0E0;" +
+                        "-fx-background-color:rgba(255,255,255,0.14);" +
+                        "-fx-padding:6 14;" +
+                        "-fx-background-radius:8;"
+        );
+
+        FadeTransition timeTransition = new FadeTransition(Duration.millis(150), timeLabel);
+        timeTransition.setFromValue(0.7);
+        timeTransition.setToValue(1.0);
+        timeTransition.play();
+
+        timeLabel.setStyle("-fx-text-fill:#B0B0B0;");
+
+        // Сохраняем текущую прозрачность emptyLabel перед сменой темы
+        double currentOpacity = emptyLabel.getOpacity();
+
+        // Устанавливаем только стиль цвета, не меняем прозрачность
+        emptyLabel.setStyle("-fx-text-fill:#AAAAAA; -fx-font-size:16px;");
+        // Восстанавливаем прозрачность
+        emptyLabel.setOpacity(currentOpacity);
+
+        // Плавный переход для слайдеров
+        FadeTransition sliderTransition1 = new FadeTransition(Duration.millis(150), progressSlider);
+        sliderTransition1.setFromValue(0.7);
+        sliderTransition1.setToValue(1.0);
+        sliderTransition1.play();
+
+        FadeTransition sliderTransition2 = new FadeTransition(Duration.millis(150), volumeSlider);
+        sliderTransition2.setFromValue(0.7);
+        sliderTransition2.setToValue(1.0);
+        sliderTransition2.play();
+
+        progressSlider.setStyle("-fx-control-inner-background: #333;");
+        volumeSlider.setStyle("-fx-control-inner-background: #333;");
+
+        // Плавный переход для кнопок
+        updateButtonStylesWithAnimation();
+    }
+
+    private void applyLightTheme() {
+        // Плавный переход для фона
+        Background newBackground = new Background(new BackgroundFill(
+                new LinearGradient(
+                        0,0,1,1,true,CycleMethod.NO_CYCLE,
+                        new Stop(0, Color.web("#f5f7fa")),
+                        new Stop(0.5, Color.web("#c3cfe2")),
+                        new Stop(1, Color.web("#e4e8f0"))
+                ),
+                CornerRadii.EMPTY, Insets.EMPTY
+        ));
+
+        root.setBackground(newBackground);
+
+        // Плавный переход для стеклянной панели
+        glass.setStyle("-fx-background-color:rgba(255,255,255,0.75); -fx-background-radius:18;");
+
+        // Плавный переход для меток
+        FadeTransition labelTransition = new FadeTransition(Duration.millis(150), nowPlayingLabel);
+        labelTransition.setFromValue(0.7);
+        labelTransition.setToValue(1.0);
+        labelTransition.play();
+
+        nowPlayingLabel.setStyle(
+                "-fx-text-fill:#333333;" +
+                        "-fx-background-color:rgba(0,0,0,0.08);" +
+                        "-fx-padding:6 14;" +
+                        "-fx-background-radius:8;"
+        );
+
+        FadeTransition timeTransition = new FadeTransition(Duration.millis(150), timeLabel);
+        timeTransition.setFromValue(0.7);
+        timeTransition.setToValue(1.0);
+        timeTransition.play();
+
+        timeLabel.setStyle("-fx-text-fill:#666666;");
+
+        // Сохраняем текущую прозрачность emptyLabel перед сменой темы
+        double currentOpacity = emptyLabel.getOpacity();
+
+        // Устанавливаем только стиль цвета, не меняем прозрачность
+        emptyLabel.setStyle("-fx-text-fill:#777777; -fx-font-size:16px;");
+        // Восстанавливаем прозрачность
+        emptyLabel.setOpacity(currentOpacity);
+
+        // Плавный переход для слайдеров
+        FadeTransition sliderTransition1 = new FadeTransition(Duration.millis(150), progressSlider);
+        sliderTransition1.setFromValue(0.7);
+        sliderTransition1.setToValue(1.0);
+        sliderTransition1.play();
+
+        FadeTransition sliderTransition2 = new FadeTransition(Duration.millis(150), volumeSlider);
+        sliderTransition2.setFromValue(0.7);
+        sliderTransition2.setToValue(1.0);
+        sliderTransition2.play();
+
+        progressSlider.setStyle("-fx-control-inner-background: #e0e0e0;");
+        volumeSlider.setStyle("-fx-control-inner-background: #e0e0e0;");
+
+        // Плавный переход для кнопок
+        updateButtonStylesWithAnimation();
+    }
+
+    private void updateButtonStylesWithAnimation() {
+        String buttonStyle;
+        if (darkTheme) {
+            buttonStyle = "-fx-background-color:rgba(255,255,255,0.14); -fx-text-fill:white; -fx-background-radius:10;";
+        } else {
+            buttonStyle = "-fx-background-color:rgba(0,0,0,0.08); -fx-text-fill:#333333; -fx-background-radius:10;";
+        }
+
+        // Плавный переход для всех кнопок
+        Button[] buttons = {prevBtn, playBtn, nextBtn, playlistBtn, themeBtn, volumeBtn};
+
+        for (Button button : buttons) {
+            FadeTransition fade = new FadeTransition(Duration.millis(150), button);
+            fade.setFromValue(0.7);
+            fade.setToValue(1.0);
+            fade.setOnFinished(e -> button.setStyle(buttonStyle));
+            fade.play();
+        }
+    }
+
+    private void updateButtonStyles() {
+        String buttonStyle;
+        if (darkTheme) {
+            buttonStyle = "-fx-background-color:rgba(255,255,255,0.14); -fx-text-fill:white; -fx-background-radius:10;";
+        } else {
+            buttonStyle = "-fx-background-color:rgba(0,0,0,0.08); -fx-text-fill:#333333; -fx-background-radius:10;";
+        }
+
+        // Обновляем стили всех основных кнопок
+        prevBtn.setStyle(buttonStyle);
+        playBtn.setStyle(buttonStyle);
+        nextBtn.setStyle(buttonStyle);
+        playlistBtn.setStyle(buttonStyle);
+        themeBtn.setStyle(buttonStyle);
+        volumeBtn.setStyle(buttonStyle);
+    }
+
     /* ================= STATE ================= */
     private void updateControlsState() {
         boolean hasPlaylist = !playlist.isEmpty();
 
+        // Кнопки плеера должны быть неактивны только когда нет плейлиста
         playBtn.setDisable(!hasPlaylist);
         prevBtn.setDisable(!hasPlaylist);
         nextBtn.setDisable(!hasPlaylist);
-        playlistBtn.setDisable(!hasPlaylist);
-        // УБРАНО: progressSlider.setDisable(mediaPlayer == null);
+
+        // Кнопка плейлиста должна быть всегда активна!
+        playlistBtn.setDisable(false);
+
         // Ползунок должен быть активен всегда, когда есть плейлист
         progressSlider.setDisable(!hasPlaylist);
 
+        // Делаем метку "Add music..." полностью прозрачной когда есть плейлист
         FadeTransition ft = new FadeTransition(Duration.millis(300), emptyLabel);
         ft.setToValue(hasPlaylist ? 0 : 1);
         ft.play();
 
+        // Делаем визуализатор видимым когда есть плейлист
         visualizer.setVisible(hasPlaylist);
+
+        // Также делаем визуализатор непрозрачным когда есть плейлист
+        if (hasPlaylist) {
+            FadeTransition visualizerFade = new FadeTransition(Duration.millis(300), visualizer);
+            visualizerFade.setToValue(1.0);
+            visualizerFade.play();
+        } else {
+            visualizer.setOpacity(0);
+        }
     }
 
     /* ================= PLAYER ================= */
@@ -266,6 +489,7 @@ public class MainApp extends Application {
             mediaPlayer.play();
             playBtn.setText("⏸");
 
+            // Плавное появление визуализатора
             FadeTransition ft = new FadeTransition(Duration.millis(400), visualizer);
             ft.setFromValue(0);
             ft.setToValue(1);
@@ -348,21 +572,6 @@ public class MainApp extends Application {
     }
 
     /* ================= PLAYLIST ================= */
-    private void addTracks(Window win) {
-        FileChooser fc = new FileChooser();
-        fc.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Audio", "*.mp3", "*.wav")
-        );
-
-        var files = fc.showOpenMultipleDialog(win);
-        if (files == null || files.isEmpty()) return;
-
-        playlist.addAll(files);
-        savePlaylist();
-        playTrack(playlist.size() - files.size());
-        updateControlsState();
-    }
-
     private void showPlaylistWindow() {
         Stage win = new Stage();
         ListView<String> list = new ListView<>();
@@ -370,15 +579,33 @@ public class MainApp extends Application {
 
         list.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) {
-                playTrack(list.getSelectionModel().getSelectedIndex());
-                win.close();
+                int selectedIndex = list.getSelectionModel().getSelectedIndex();
+                if (selectedIndex >= 0 && selectedIndex < playlist.size()) {
+                    playTrack(selectedIndex);
+                    win.close();
+                }
             }
         });
 
         Button add = new Button("➕ Add");
         Button del = new Button("❌ Delete");
 
-        add.setOnAction(e -> addTracks(win));
+        add.setOnAction(e -> {
+            FileChooser fc = new FileChooser();
+            fc.getExtensionFilters().add(
+                    new FileChooser.ExtensionFilter("Audio", "*.mp3", "*.wav")
+            );
+
+            var files = fc.showOpenMultipleDialog(win);
+            if (files == null || files.isEmpty()) return;
+
+            playlist.addAll(files);
+            savePlaylist();
+            playTrack(playlist.size() - files.size());
+            refreshPlaylistView(list);
+            updateControlsState();
+        });
+
         del.setOnAction(e -> {
             int idx = list.getSelectionModel().getSelectedIndex();
             if (idx >= 0) {
